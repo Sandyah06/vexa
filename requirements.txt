@@ -1,0 +1,12 @@
+# Core runtime
+flask
+python-dotenv
+
+# Vector DB and LLM stack
+pinecone==7.3.0
+langchain>=0.0.302,<1.0
+ollama
+
+# Document processing
+PyPDF2
+
