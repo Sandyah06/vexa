@@ -5,6 +5,8 @@ Uses Ollama's nomic-embed-text model for fast, local semantic embeddings.
 from typing import List
 import hashlib
 import struct
+import os
+import ollama
 
 
 class MockEmbeddings:
@@ -23,7 +25,6 @@ class MockEmbeddings:
     def _test_ollama(self):
         """Test if Ollama is available with nomic-embed-text model."""
         try:
-            import ollama
             # Test embedding
             result = ollama.embeddings(model="nomic-embed-text", prompt="test")
             if result and "embedding" in result:
@@ -62,7 +63,6 @@ class MockEmbeddings:
     def _embed_with_ollama(self, text: str) -> List[float]:
         """Embed using Ollama's nomic-embed-text endpoint."""
         try:
-            import ollama
             result = ollama.embeddings(model="nomic-embed-text", prompt=text)
             embedding = result.get("embedding", [])
             return self._pad_or_truncate(embedding)

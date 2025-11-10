@@ -1,6 +1,7 @@
 import os
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
+from werkzeug.utils import secure_filename
 
 load_dotenv()
 
@@ -9,6 +10,16 @@ from config import PINECONE_API_KEY, PINECONE_ENV, INDEX_NAME, VECTOR_DIM, LLM_M
 # Import ingestor and simple query (no LangChain dependencies)
 from ingestor_simple import ingest_folder
 from query_simple import ask_question
+
+# Configuration for file uploads
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploaded_docs')
+ALLOWED_EXTENSIONS = {'pdf', 'txt', 'md'}
+
+# Ensure upload folder exists
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # Try to ensure Pinecone index exists at startup
 try:
@@ -56,6 +67,57 @@ def home():
     return render_template("index.html", message=message)
 
 
+@app.route("/upload", methods=["POST"])
+def upload_file():
+    """Handle file upload and ingestion."""
+    message = ""
+    
+    if 'file' not in request.files:
+        message = "❌ No file selected"
+        return render_template("index.html", message=message)
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        message = "❌ No file selected"
+        return render_template("index.html", message=message)
+    
+    if file and allowed_file(file.filename):
+        try:
+            # Clear uploaded_docs folder
+            for existing_file in os.listdir(UPLOAD_FOLDER):
+                file_path = os.path.join(UPLOAD_FOLDER, existing_file)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+            
+            # Save new file
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            file.save(file_path)
+            
+            # Clear Pinecone
+            try:
+                from pinecone import Pinecone as PineconeClient
+                pc = PineconeClient(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+                index = pc.Index(INDEX_NAME)
+                print(f"🗑️  Clearing old data from Pinecone...")
+                index.delete(delete_all=True)
+                print(f"✅ Cleared!")
+            except Exception as e:
+                print(f"⚠️  Could not clear Pinecone: {e}")
+            
+            # Ingest the uploaded_docs folder
+            ingested_count = ingest_folder(UPLOAD_FOLDER)
+            message = f"✅ File uploaded successfully! Ingested {ingested_count} chunks."
+            
+        except Exception as e:
+            message = f"❌ Error: {str(e)}"
+    else:
+        message = "❌ Invalid file type. Please upload PDF, TXT, or MD files."
+    
+    return render_template("index.html", message=message)
+
+
 @app.route("/query", methods=["POST"])
 def query_page():
     """Query endpoint: search and answer questions."""
@@ -95,4 +157,3 @@ def query_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
-

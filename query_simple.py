@@ -60,29 +60,48 @@ def ask_question(query: str) -> str:
         for i, doc in enumerate(retrieved_docs, 1):
             print(f"  {i}. {doc[:100]}...")
         
-        # Simple prompt - give concise answer with key info
-        prompt = f"""Context:
+        # Prompt - extract exact text from story ONLY
+        prompt = f"""You are answering questions by copying EXACT sentences from the story. NOTHING ELSE.
+
+STORY TEXT:
 {context}
 
-Question: {query}
+QUESTION: {query}
 
-Give a SHORT answer (1-2 words or short phrase):"""
+RULES:
+1. Copy EXACT sentences from the story above
+2. If the answer is NOT in the story, respond ONLY with: "This is not mentioned in the story"
+3. Do NOT rephrase, summarize, or add ANY words
+4. Do NOT add explanations or instructions
+5. Response should be ONLY the exact story text OR "This is not mentioned in the story"
+
+ANSWER (exact story text only):"""
         
         # Generate answer with Ollama
         print(f"🧠 Using Ollama model: {LLM_MODEL}")
         print(f"⏳ Generating answer...")
         
-        response = ollama.generate(
-            model=LLM_MODEL,
-            prompt=prompt,
-            stream=False
-        )
+        try:
+            response = ollama.generate(
+                model=LLM_MODEL,
+                prompt=prompt,
+                stream=False
+            )
+        except Exception as e:
+            print(f"⚠️  Retrying Ollama connection...")
+            import time
+            time.sleep(2)
+            response = ollama.generate(
+                model=LLM_MODEL,
+                prompt=prompt,
+                stream=False
+            )
         
         answer = response.get("response", "").strip()
         if not answer:
-            return "❌ Failed to generate answer"
+            return "This is not mentioned in the story"
         
-        # Clean up only the most obvious extra phrases
+        # Clean up preamble
         unwanted_starts = [
             "the answer is",
             "answer:",
@@ -95,10 +114,7 @@ Give a SHORT answer (1-2 words or short phrase):"""
                 answer = answer[len(start):].strip()
                 break
         
-        # Print to terminal
         print(f"✅ Answer: {answer}")
-        
-        # Return ONLY the answer to chat UI
         return answer
     
     except Exception as e:
